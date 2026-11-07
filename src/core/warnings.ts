@@ -1,5 +1,5 @@
 import type { ClosedBox, DriverTS, DriverType } from "./types.ts";
-
+import { QTC_OVERDAMPED_BELOW, QTC_OK_MAX, QTC_PEAKY_MAX, VB_MIN_L, VB_MAX_L, XMAX_SUB_MIN_MM, DEFAULT_CROSSOVER_HZ } from "../test/core/constants.ts";
 export type WarningLevel = "info" | "warn" | "error";
 
 export type WarningCode =
@@ -10,21 +10,15 @@ export type WarningCode =
     | "vb_too_large"
     | "fc_above_crossover"
     | "xmax_small"
-    | "wrong_type_for_box";
+    | "wrong_type_for_box"
+    | "port_velocity_high"
+    | "port_too_short";
 
 export interface BoxWarning {
     code: WarningCode;
     level: WarningLevel;
     message: string;
 }
-
-export const QTC_OVERDAMPED_BELOW = 0.5;
-export const QTC_OK_MAX = 0.75;
-export const QTC_PEAKY_MAX = 0.9;
-export const VB_MIN_L = 1;
-export const VB_MAX_L = 200;
-export const XMAX_SUB_MIN_MM = 5;
-export const DEFAULT_CROSSOVER_HZ = 80;
 
 export interface BoxCheckInput {
     ts: DriverTS;
@@ -59,6 +53,9 @@ const TEXTS: Record<WarningCode, (c: Ctx) => string> = {
         `Xmax ${c.xmax} мм мал для сабвуфера: на большой мощности динамик упрётся в ход.`,
     wrong_type_for_box: () =>
         `Закрытый ящик не подходит для твитера: динамик не рассчитан на такой объём.`,
+    // тексты порта хранятся в portedBox.ts, здесь только для полноты типа
+    port_velocity_high: () => "",
+    port_too_short: () => "",
 };
 
 export function checkClosedBox(input: BoxCheckInput): BoxWarning[] {

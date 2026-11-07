@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { closedBox, f3Of, peakDbOf, responseDb, vbForQtc } from "../../core/closedBox";
 import type { DriverTS } from "../../core/types";
+import { sampleResponse } from "../../core/closedBox";
 
 // sd и xmax обязательны по типу, на расчёт закрытого ящика не влияют.
 const ts: DriverTS = { fs: 32, qts: 0.42, vas: 45, sd: 340, xmax: 7 };
@@ -73,6 +74,10 @@ describe("responseDb", () => {
         const b = responseDb(20, 50, 0.7);
         expect(a - b).toBeLessThan(-11);
     });
+
+    it("контрольная точка: x = 2, Q = 0.5 даёт -1.94 дБ", () => {
+        expect(responseDb(100, 50, 0.5)).toBeCloseTo(-1.9382, 3);
+    });
 });
 
 describe("vbForQtc", () => {
@@ -100,3 +105,28 @@ describe("входная проверка", () => {
         expect(() => closedBox({ ...ts, fs: NaN }, 20)).toThrow(/fs/);
     });
 });
+
+describe("sampleResponse", () => {
+    it("первая точка равна fMin, последняя fMax", () => {
+        const pts = sampleResponse(60, 0.7, 10, 300, 50);
+        expect(pts[0].f).toBeCloseTo(10, 6);
+        expect(pts[pts.length - 1].f).toBeCloseTo(300, 6);
+    });
+
+    it("число точек совпадает с запрошенным", () => {
+        expect(sampleResponse(60, 0.7, 10, 300, 123)).toHaveLength(123);
+    });
+
+    it("точки лог-равномерны: отношение соседних частот постоянно", () => {
+        const pts = sampleResponse(60, 0.7, 10, 300, 20);
+        const r0 = pts[1].f / pts[0].f;
+        const r1 = pts[10].f / pts[9].f;
+        expect(r1).toBeCloseTo(r0, 6);
+    });
+
+    it("уровень в точках совпадает с responseDb", () => {
+        const pts = sampleResponse(60, 0.7, 10, 300, 20);
+        expect(pts[5].db).toBeCloseTo(responseDb(pts[5].f, 60, 0.7), 10);
+    });
+});
+

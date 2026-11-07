@@ -49,3 +49,24 @@ export function vbForQtc(ts: DriverTS, targetQtc: number): number | null {
     if (targetQtc <= ts.qts) return null;
     return ts.vas / ((targetQtc / ts.qts) ** 2 - 1);
 }
+
+export function sampleResponse(
+    fc: number,
+    qtc: number,
+    fMin = 10,
+    fMax = 300,
+    points = 200,
+): { f: number; db: number }[] {
+    assertPositive("fc", fc);
+    assertPositive("qtc", qtc);
+    assertPositive("fMin", fMin);
+    assertPositive("fMax", fMax);
+    const out: { f: number; db: number }[] = [];
+    const lo = Math.log(fMin);
+    const hi = Math.log(fMax);
+    for (let i = 0; i < points; i++) {
+        const f = Math.exp(lo + ((hi - lo) * i) / (points - 1));
+        out.push({ f, db: responseDb(f, fc, qtc) });
+    }
+    return out;
+}

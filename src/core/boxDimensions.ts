@@ -1,5 +1,6 @@
 import { assertPositive } from "./assert";
 import { cmToMm, litersToCm3, mmToCm } from "./units";
+import { VOLUME_TOLERANCE } from "../test/core/constants.ts";
 
 /** Размеры в сантиметрах. */
 export interface Dims {
@@ -54,9 +55,6 @@ export interface BoxDimensionsResult {
     /** Причины, если не влезло или есть заметное отклонение объёма. Пусто, если всё в порядке. */
     reasons: string[];
 }
-
-/** Допустимое отклонение объёма, доля. 0.5 % достаточно для пиления. */
-export const VOLUME_TOLERANCE = 0.005;
 
 const SIDES = ["w", "h", "d"] as const;
 

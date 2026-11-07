@@ -1,10 +1,7 @@
 import { assertPositive } from "./assert.ts";
 import type { DeriveResult, DeriveWarning, DriverSourceMap, DriverTS, FieldMeta } from "./types.ts";
 import { litersToM3, m3ToLiters } from "./units.ts";
-
-export const AIR_DENSITY_KG_M3 = 1.2;
-export const SPEED_OF_SOUND_M_S = 343;
-export const DEFAULT_TOLERANCE = 0.1;
+import { AIR_DENSITY_KG_M3, SPEED_OF_SOUND_M_S, DEFAULT_TOLERANCE } from "../test/core/constants.ts";
 
 const CM2_PER_M2 = 10_000;
 const G_PER_KG = 1_000;
