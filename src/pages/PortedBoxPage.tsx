@@ -4,6 +4,7 @@ import type { DriverTS } from "../core/types";
 import type { BoxWarning } from "../core/warnings";
 import { FieldWithHint } from "../components/FieldWithHint";
 import { WarningBar } from "../components/WarningBar";
+import {PortedCompareChart} from "../components/PortedCompareCharts.tsx";
 
 const panel = "grid content-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3";
 
@@ -84,6 +85,7 @@ export function PortedBoxPage() {
                 ) : (
                     <p className="text-zinc-400">Заполни все поля положительными числами.</p>
                 )}
+                <PortedCompareChart params={{ fs: ts.fs, qts: ts.qts, vas: ts.vas, vb, fb: result.fbHz, ql: 10 }} />
             </main>
 
             <aside className={panel}>
