@@ -35,15 +35,15 @@ describe("innerCapOf", () => {
         expect(innerCapOf("w", 60, 1.8, 0)).toBeCloseTo(56.4, 6);
     });
 
-    it("глубина дополнительно вычитает Dm", () => {
-        expect(innerCapOf("d", 40, 1.8, 5)).toBeCloseTo(31.4, 6);
+    it("монтажная глубина не вычитается из размеров полости", () => {
+        expect(innerCapOf("d", 40, 1.8, 5)).toBeCloseTo(36.4, 6);
     });
 });
 
 describe("outerFromInner", () => {
-    it("внешние размеры: внутренние плюс стенки, глубина ещё плюс Dm", () => {
+    it("внешние размеры: внутренние плюс стенки, глубина динамика не увеличивает корпус", () => {
         const outer = outerFromInner({ w: 30, h: 30, d: 30 }, 1.8, 5);
-        expect(outer).toEqual({ w: 33.6, h: 33.6, d: 38.6 });
+        expect(outer).toEqual({ w: 33.6, h: 33.6, d: 33.6 });
     });
 });
 
@@ -65,6 +65,13 @@ describe("solveBoxDimensions: без ограничений", () => {
     it("объём туда и обратно: volumeL соответствует innerCm", () => {
         const r = solveBoxDimensions({ vbNetL: 45 });
         expect(r.volumeL).toBeCloseTo(volumeLiters(r.innerCm), 10);
+    });
+
+    it("добавляет вытеснение к геометрическому объёму, сохраняя заданный нетто-объём", () => {
+        const r = solveBoxDimensions({ vbNetL: 20, driverDisplacementL: 2 });
+        expect(r.grossVolumeL).toBeCloseTo(22, 1);
+        expect(r.volumeL).toBeCloseTo(20, 1);
+        expect(r.volumeL).toBeCloseTo(r.grossVolumeL - 2, 10);
     });
 
     it("ДСП и фанера дают разные внешние размеры при одинаковом объёме", () => {
@@ -125,8 +132,40 @@ describe("solveBoxDimensions: ниша", () => {
     it("глубина с Dm учитывается при проверке ниши", () => {
         const withoutDm = solveBoxDimensions({ vbNetL: 20, maxOuterCm: { d: 35 } });
         const withDm = solveBoxDimensions({ vbNetL: 20, maxOuterCm: { d: 35 }, dmCm: 8 });
-        expect(withDm.innerCm.d).toBeLessThan(withoutDm.innerCm.d);
+        expect(withDm.innerCm.d).toBe(withoutDm.innerCm.d);
         expect(withDm.outerCm.d).toBeLessThanOrEqual(35 + 1e-9);
+    });
+
+    it("увеличивает свободную переднюю панель под номинальный диаметр и сохраняет нетто-объём", () => {
+        const r = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: 381 });
+        expect(r.outerCm.w * 10).toBeGreaterThanOrEqual(381);
+        expect(r.outerCm.h * 10).toBeGreaterThanOrEqual(381);
+        expect(r.volumeL).toBeCloseTo(20, 1);
+        expect(r.fits).toBe(true);
+    });
+
+    it("оставляет заданный запас по краям передней панели и сохраняет нетто-объём", () => {
+        const nominalDiameterMm = 381;
+        const clearancePerSideMm = 15;
+        const r = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: nominalDiameterMm + 2 * clearancePerSideMm });
+        expect(r.outerCm.w * 10).toBeGreaterThanOrEqual(411);
+        expect(r.outerCm.h * 10).toBeGreaterThanOrEqual(411);
+        expect(r.volumeL).toBeCloseTo(20, 1);
+    });
+
+    it("не меняет ручные стороны, если передняя панель мала для динамика", () => {
+        const r = solveBoxDimensions({ vbNetL: 20, fixedInnerCm: { w: 27.1, h: 27.1 }, minFrontOuterMm: 381 });
+        expect(r.outerCm.w).toBeCloseTo(30.7, 6);
+        expect(r.outerCm.h).toBeCloseTo(30.7, 6);
+        expect(r.fits).toBe(false);
+        expect(r.reasons.some((reason) => reason.includes("номинального диаметра динамика"))).toBe(true);
+    });
+
+    it("сообщает, когда ограничение ниши меньше номинального размера динамика", () => {
+        const r = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: 381, maxOuterCm: { w: 30 } });
+        expect(r.outerCm.w).toBeLessThanOrEqual(30 + 1e-9);
+        expect(r.fits).toBe(false);
+        expect(r.reasons.some((reason) => reason.includes("381 мм"))).toBe(true);
     });
 });
 
@@ -137,5 +176,33 @@ describe("входная проверка", () => {
 
     it("отрицательный Dm не проходит", () => {
         expect(() => solveBoxDimensions({ vbNetL: 30, dmCm: -1 })).toThrow(/dmCm/);
+    });
+
+    it("нулевое ограничение габарита не проходит", () => {
+        expect(() => solveBoxDimensions({ vbNetL: 20, maxOuterCm: { w: 0 } })).toThrow(/maxOuterCm.w/);
+    });
+
+    it("слишком маленькая ниша не создаёт отрицательные внутренние размеры", () => {
+        expect(() => solveBoxDimensions({ vbNetL: 20, maxOuterCm: { w: 3 } })).toThrow(/слишком мал/);
+    });
+
+    it("отклоняет физически невозможную нишу и при фиксированном размере стороны", () => {
+        expect(() => solveBoxDimensions({
+            vbNetL: 20,
+            fixedInnerCm: { w: 10 },
+            maxOuterCm: { w: 3 },
+        })).toThrow(/maxOuterCm\.w: габарит слишком мал/);
+    });
+
+    it("учитывает глубину динамика при проверке минимальной ниши", () => {
+        expect(solveBoxDimensions({ vbNetL: 20, dmCm: 8, maxOuterCm: { d: 8.5 } }).reasons.some(reason => reason.includes("Глубина установки"))).toBe(true);
+    });
+
+    it("нулевой фиксированный размер не проходит", () => {
+        expect(() => solveBoxDimensions({ vbNetL: 20, fixedInnerCm: { h: 0 } })).toThrow(/fixedInnerCm.h/);
+    });
+
+    it("неположительная пропорция не проходит", () => {
+        expect(() => solveBoxDimensions({ vbNetL: 20, ratio: [1, 0, 1] })).toThrow(/ratio.h/);
     });
 });
