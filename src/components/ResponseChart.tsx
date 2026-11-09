@@ -17,13 +17,12 @@ const yOf = (db: number) =>
 interface Props {
     fc: number;
     qtc: number;
-    f3: number;
     cabin?: CabinGain;
 }
 
 type Line = { f: number };
 
-export function ResponseChart({ fc, qtc, f3, cabin = CABIN_GAIN_DEFAULT }: Props) {
+export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
     const [hover, setHover] = useState<number | null>(null);
     const [lines, setLines] = useState<Line[]>([]);
     const [activeFreq, setActiveFreq] = useState<number | null>(null);

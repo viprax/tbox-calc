@@ -81,7 +81,7 @@ export function ClosedBoxPage() {
                                 />
                                 Салон автомобиля (cabin gain, условно)
                             </label>
-                            <ResponseChart fc={result.fc} qtc={result.qtc} f3={result.f3} cabin={cabin} />
+                            <ResponseChart fc={result.fc} qtc={result.qtc} cabin={cabin} />
                         </div>
                         <WarningBar warnings={warnings} />
                     </>
