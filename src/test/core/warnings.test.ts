@@ -9,7 +9,7 @@ const codes = (ws: BoxWarning[]) => ws.map((w) => w.code);
 
 function run(vb: number, extra: Partial<BoxCheckInput> = {}): BoxWarning[] {
     const driver = extra.ts ?? ts;
-    const box = closedBox(driver, vb);
+    const box = closedBox(driver, vb, Infinity);
     return checkClosedBox({ ts: driver, vb, box, type: "subwoofer", ...extra });
 }
 

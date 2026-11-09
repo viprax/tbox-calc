@@ -1,6 +1,7 @@
 import { assertPositive } from "./assert.ts";
 import type { ClosedBox, DriverTS } from "./types.ts";
 
+
 export function f3Of(fc: number, qtc: number): number {
     assertPositive("fc", fc);
     assertPositive("qtc", qtc);
@@ -14,24 +15,28 @@ export function peakDbOf(qtc: number): number {
     return 20 * Math.log10((qtc * qtc) / Math.sqrt(qtc * qtc - 0.25));
 }
 
-export function closedBox(ts: DriverTS, vb: number): ClosedBox {
+/** Добротность потерь ящика по умолчанию, как в WinISD. */
+export const QL_DEFAULT = 10;
+
+/**
+ * Расчёт закрытого ящика.
+ * ql - добротность потерь ящика. Infinity = без потерь.
+ * 1/Qtc = 1/Qtc0 + 1/Ql, как в WinISD.
+ */
+export function closedBox(ts: DriverTS, vb: number, ql: number = QL_DEFAULT): ClosedBox {
     assertPositive("fs", ts.fs);
     assertPositive("qts", ts.qts);
     assertPositive("vas", ts.vas);
     assertPositive("vb", vb);
+    const invQl = ql === Infinity ? 0 : 1 / assertPositive("ql", ql);
 
     const alpha = ts.vas / vb;
     const k = Math.sqrt(1 + alpha);
     const fc = ts.fs * k;
-    const qtc = ts.qts * k;
+    const qtc0 = ts.qts * k;
+    const qtc = 1 / (1 / qtc0 + invQl);
 
-    return {
-        alpha,
-        fc,
-        qtc,
-        f3: f3Of(fc, qtc),
-        peakDb: peakDbOf(qtc),
-    };
+    return { alpha, fc, qtc, f3: f3Of(fc, qtc), peakDb: peakDbOf(qtc) };
 }
 
 export function responseDb(f: number, fc: number, qtc: number): number {

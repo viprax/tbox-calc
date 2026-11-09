@@ -8,7 +8,7 @@ const ts: DriverTS = { fs: 32, qts: 0.42, vas: 45, sd: 340, xmax: 7 };
 
 describe("closedBox: свойства", () => {
     it("при очень большом ящике fc стремится к Fs, Qtc к Qts", () => {
-        const box = closedBox(ts, 1e9);
+        const box = closedBox(ts, 1e9, Infinity);
         expect(box.fc).toBeCloseTo(ts.fs, 3);
         expect(box.qtc).toBeCloseTo(ts.qts, 3);
     });
@@ -84,7 +84,7 @@ describe("vbForQtc", () => {
     it("возвращает объём, при котором closedBox даёт заданный Qtc", () => {
         const vb = vbForQtc(ts, 0.707);
         expect(vb).not.toBeNull();
-        expect(closedBox(ts, vb as number).qtc).toBeCloseTo(0.707, 3);
+        expect(closedBox(ts, vb as number, Infinity).qtc).toBeCloseTo(0.707, 3);
     });
 
     it("цель ниже Qts недостижима: null", () => {
@@ -127,6 +127,39 @@ describe("sampleResponse", () => {
     it("уровень в точках совпадает с responseDb", () => {
         const pts = sampleResponse(60, 0.7, 10, 300, 20);
         expect(pts[5].db).toBeCloseTo(responseDb(pts[5].f, 60, 0.7), 10);
+    });
+});
+
+describe("closedBox: потери в ящике (Ql)", () => {
+    const ts: DriverTS = { fs: 32.3, qts: 0.28, vas: 50.8, sd: 750, xmax: 20 };
+
+    it("без потерь Qtc равен Qtc0", () => {
+        const box = closedBox(ts, 20, Infinity);
+        expect(box.qtc).toBeCloseTo(0.28 * Math.sqrt(1 + 50.8 / 20), 6);
+    });
+
+    it("с Ql = 10 Qtc ниже, чем без потерь", () => {
+        expect(closedBox(ts, 20, 10).qtc).toBeLessThan(closedBox(ts, 20, Infinity).qtc);
+    });
+
+    it("fc от потерь не зависит", () => {
+        expect(closedBox(ts, 20, 10).fc).toBeCloseTo(closedBox(ts, 20, Infinity).fc, 10);
+    });
+
+    it("совпадает с WinISD (Ql = 10) на четырёх объёмах", () => {
+        expect(closedBox(ts, 10).qtc).toBeCloseTo(0.646, 2);
+        expect(closedBox(ts, 20).qtc).toBeCloseTo(0.500, 2);
+        expect(closedBox(ts, 40).qtc).toBeCloseTo(0.405, 2);
+        expect(closedBox(ts, 7.96).qtc).toBeCloseTo(0.707, 2);
+    });
+
+    it("совпадает с WinISD по fc и f3", () => {
+        expect(closedBox(ts, 10).fc).toBeCloseTo(79.6, 1);
+        expect(closedBox(ts, 20).fc).toBeCloseTo(60.8, 1);
+        expect(closedBox(ts, 40).fc).toBeCloseTo(48.7, 1);
+        expect(closedBox(ts, 10).f3).toBeCloseTo(87.9, 0);
+        expect(closedBox(ts, 20).f3).toBeCloseTo(94.3, 0);
+        expect(closedBox(ts, 40).f3).toBeCloseTo(101.3, 0);
     });
 });
 

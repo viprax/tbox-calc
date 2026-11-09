@@ -7,6 +7,7 @@ import { FieldWithHint } from "../components/FieldWithHint";
 import { ResponseChart } from "../components/ResponseChart";
 import { MetricsRow } from "../components/MetricsRow";
 import { WarningBar } from "../components/WarningBar";
+import { CABIN_GAIN_DEFAULT, type CabinGain } from "../core/cabinGain.ts";
 
 /** Пример из переписки. Параметры неподтверждённые: проверь по даташиту. */
 
@@ -35,6 +36,7 @@ function fieldError(name: string, v: number): string | null {
 export function ClosedBoxPage() {
     const [ts, setTs] = useState<DriverTS>(EXAMPLE);
     const [vb, setVb] = useState(20);
+    const [cabin, setCabin] = useState<CabinGain>(CABIN_GAIN_DEFAULT);
 
     const errors = {
         fs: fieldError("Fs", ts.fs),
@@ -71,7 +73,15 @@ export function ClosedBoxPage() {
                     <>
                         <MetricsRow qtc={result.qtc} fc={result.fc} f3={result.f3} peakDb={result.peakDb} />
                         <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
-                            <ResponseChart fc={result.fc} qtc={result.qtc} f3={result.f3} />
+                            <label className="flex items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={cabin.enabled}
+                                    onChange={(e) => setCabin((c) => ({ ...c, enabled: e.target.checked }))}
+                                />
+                                Салон автомобиля (cabin gain, условно)
+                            </label>
+                            <ResponseChart fc={result.fc} qtc={result.qtc} f3={result.f3} cabin={cabin} />
                         </div>
                         <WarningBar warnings={warnings} />
                     </>

@@ -23,5 +23,6 @@ export const DEFAULT_CROSSOVER_HZ = 80;
 // Расчёт недостающих данных
 export const DEFAULT_TOLERANCE = 0.1;       // допуск расхождения, 10 %
 
+
 // Размеры короба
 export const VOLUME_TOLERANCE = 0.005;      // допуск объёма, 0.5 %
