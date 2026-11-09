@@ -38,8 +38,12 @@ export interface BoxDimensionsInput extends Constraints {
     vbNetL: number;
     /** Материал стенок. По умолчанию фанера. */
     material?: MaterialKey;
-    /** Глубина установки динамика Dm, см. Вычитается из внутренней глубины. */
+    /** Глубина установки динамика Dm, см. Измеряется от наружной поверхности передней панели. */
     dmCm?: number;
+    /** Объём, занимаемый динамиком внутри короба, литры. */
+    driverDisplacementL?: number;
+    /** Минимальная ширина и высота наружной передней панели, мм (номинальный размер динамика). */
+    minFrontOuterMm?: number;
 }
 
 export interface BoxDimensionsResult {
@@ -50,6 +54,8 @@ export interface BoxDimensionsResult {
     outerCm: Dims;
     /** Фактический объём нетто по округлённым размерам, литры. */
     volumeL: number;
+    /** Геометрический внутренний объём до вычета вытеснения динамика, литры. */
+    grossVolumeL: number;
     /** Фактический минус целевой объём, литры. */
     errorL: number;
     /** Причины, если не влезло или есть заметное отклонение объёма. Пусто, если всё в порядке. */
@@ -63,12 +69,12 @@ export function roundToMm(cm: number): number {
     return Math.round(cmToMm(cm)) / 10;
 }
 
-/** Внешние размеры: внутренние плюс две стенки по каждой оси, глубина ещё плюс Dm. */
-export function outerFromInner(inner: Dims, wallCm: number, dmCm: number): Dims {
+/** Внешние размеры: внутренние плюс две стенки по каждой оси, глубина динамика проверяется отдельно. */
+export function outerFromInner(inner: Dims, wallCm: number, _dmCm: number): Dims {
     return {
         w: inner.w + 2 * wallCm,
         h: inner.h + 2 * wallCm,
-        d: inner.d + 2 * wallCm + dmCm,
+        d: inner.d + 2 * wallCm,
     };
 }
 
@@ -90,11 +96,11 @@ export function scaleFor(targetCm3: number, fixedVolumeCm3: number, ratios: numb
 
 /**
  * Внутренний предел стороны по нише.
- * Общее правило: максимум снаружи минус две стенки, а для глубины ещё минус Dm.
+ * Общее правило: максимум снаружи минус две стенки, глубина установки не вычитается из объёма.
  */
 export function innerCapOf(key: keyof Dims, maxOuterCm: number, wallCm: number, dmCm: number): number {
-    const dm = key === "d" ? dmCm : 0;
-    return maxOuterCm - 2 * wallCm - dm;
+    void key; void dmCm;
+    return maxOuterCm - 2 * wallCm;
 }
 
 /**
@@ -111,14 +117,31 @@ export function solveBoxDimensions(input: BoxDimensionsInput): BoxDimensionsResu
     if (!Number.isFinite(dmCm) || dmCm < 0) {
         throw new Error("dmCm: ожидалось число не меньше нуля");
     }
+    if (input.minFrontOuterMm !== undefined) assertPositive("minFrontOuterMm", input.minFrontOuterMm);
+    const displacementL = input.driverDisplacementL ?? 0;
+    if (!Number.isFinite(displacementL) || displacementL < 0) throw new Error("driverDisplacementL: ожидалось число не меньше нуля");
 
-    const targetCm3 = litersToCm3(input.vbNetL);
+    const targetCm3 = litersToCm3(input.vbNetL + displacementL);
     const fixed = input.fixedInnerCm ?? {};
     const ratioArr = input.ratio ?? [1, 1, 1];
     const ratioOf: Record<keyof Dims, number> = { w: ratioArr[0], h: ratioArr[1], d: ratioArr[2] };
+    for (const key of SIDES) {
+        if (fixed[key] !== undefined) assertPositive(`fixedInnerCm.${key}`, fixed[key]!);
+        if (input.maxOuterCm?.[key] !== undefined) assertPositive(`maxOuterCm.${key}`, input.maxOuterCm[key]!);
+        if (!Number.isFinite(ratioOf[key]) || ratioOf[key] <= 0) throw new Error(`ratio.${key}: ожидалось положительное число`);
+    }
 
     const freeSides = SIDES.filter((k) => fixed[k] === undefined);
     const fixedVolume = SIDES.filter((k) => fixed[k] !== undefined).reduce((a, k) => a * (fixed[k] as number), 1);
+
+    // Даже фиксированный размер не делает физически невозможную нишу допустимой:
+    // сначала проверяем, что снаружи вообще остаётся место для стенок (и динамика).
+    for (const k of SIDES) {
+        const max = input.maxOuterCm?.[k];
+        if (max !== undefined && innerCapOf(k, max, wallCm, dmCm) <= 0) {
+            throw new Error(`maxOuterCm.${k}: габарит слишком мал для стенок короба${k === "d" && dmCm > 0 ? " и глубины динамика" : ""}`);
+        }
+    }
 
     const scale = scaleFor(targetCm3, fixedVolume, freeSides.map((k) => ratioOf[k]));
 
@@ -127,17 +150,54 @@ export function solveBoxDimensions(input: BoxDimensionsInput): BoxDimensionsResu
     for (const k of SIDES) {
         const raw = fixed[k] ?? scale * ratioOf[k];
         const max = input.maxOuterCm?.[k];
-        inner[k] = fixed[k] === undefined && max !== undefined
-            ? Math.min(raw, innerCapOf(k, max, wallCm, dmCm))
-            : raw;
+        if (fixed[k] === undefined && max !== undefined) {
+            const cap = innerCapOf(k, max, wallCm, dmCm);
+            inner[k] = Math.min(raw, cap);
+        } else inner[k] = raw;
+    }
+
+    const frontPanelReasons: string[] = [];
+    let frontWasExpanded = false;
+    if (input.minFrontOuterMm !== undefined) {
+        const minFrontInnerCm = Math.max(0, mmToCm(input.minFrontOuterMm) - 2 * wallCm);
+        for (const key of ["w", "h"] as const) {
+            const max = input.maxOuterCm?.[key];
+            const cap = max === undefined ? Number.POSITIVE_INFINITY : innerCapOf(key, max, wallCm, dmCm);
+            if (fixed[key] !== undefined) {
+                if (inner[key] < minFrontInnerCm) {
+                    const actualOuter = inner[key] + 2 * wallCm;
+                    frontPanelReasons.push(`наружная сторона ${key.toUpperCase()} ${cmToMm(actualOuter).toFixed(0)} мм меньше номинального диаметра динамика ${input.minFrontOuterMm.toFixed(0)} мм`);
+                }
+            } else if (cap < minFrontInnerCm) {
+                frontPanelReasons.push(`по стороне ${key.toUpperCase()} ниша меньше требуемых ${input.minFrontOuterMm.toFixed(0)} мм для передней панели динамика`);
+            } else if (inner[key] < minFrontInnerCm) {
+                inner[key] = minFrontInnerCm;
+                frontWasExpanded = true;
+            }
+        }
+
+        // Если автоматический подбор увеличил лицевую панель, пересчитываем
+        // свободную глубину, чтобы сохранить заданный нетто-объём.
+        if (frontWasExpanded && fixed.d === undefined) {
+            const targetDepth = targetCm3 / (inner.w * inner.h);
+            const maxDepth = input.maxOuterCm?.d;
+            inner.d = maxDepth === undefined
+                ? targetDepth
+                : Math.min(targetDepth, innerCapOf("d", maxDepth, wallCm, dmCm));
+        }
     }
 
     const roundedInner: Dims = { w: roundToMm(inner.w), h: roundToMm(inner.h), d: roundToMm(inner.d) };
-    const volumeL = volumeLiters(roundedInner);
+    const grossVolumeL = volumeLiters(roundedInner);
+    const volumeL = grossVolumeL - displacementL;
+    assertPositive("Нетто-объём после вычета вытеснения", volumeL);
     const errorL = volumeL - input.vbNetL;
     const outerCm = outerFromInner(roundedInner, wallCm, dmCm);
 
-    const reasons: string[] = [];
+    const reasons: string[] = [...frontPanelReasons];
+    if (dmCm > roundedInner.d + wallCm) {
+        reasons.push(`Глубина установки ${cmToMm(dmCm)} мм превышает доступные ${cmToMm(roundedInner.d + wallCm).toFixed(0)} мм от наружной поверхности передней панели до задней стенки. Увеличьте глубину короба.`);
+    }
     for (const k of SIDES) {
         const max = input.maxOuterCm?.[k];
         if (max !== undefined && outerCm[k] > max + 1e-9) {
@@ -154,6 +214,7 @@ export function solveBoxDimensions(input: BoxDimensionsInput): BoxDimensionsResu
         innerCm: roundedInner,
         outerCm,
         volumeL,
+        grossVolumeL,
         errorL,
         reasons,
     };

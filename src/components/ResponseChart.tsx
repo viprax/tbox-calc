@@ -101,13 +101,13 @@ export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
             {Y_TICKS.map((db) => (
                 <g key={db}>
                     <line x1={PAD.l} x2={W - PAD.r} y1={yOf(db)} y2={yOf(db)}
-                          className={db === 0 ? "stroke-zinc-400/60" : "stroke-zinc-700"} />
+                          className={db === 0 ? "stroke-zinc-500/70" : "stroke-zinc-800"} />
                     <text x={PAD.l - 6} y={yOf(db) + 4} textAnchor="end" className="fill-zinc-400 text-[11px]">{db}</text>
                 </g>
             ))}
             {X_TICKS.map((f) => (
                 <g key={f}>
-                    <line x1={xOf(f)} x2={xOf(f)} y1={PAD.t} y2={H - PAD.b} className="stroke-zinc-700" />
+                    <line x1={xOf(f)} x2={xOf(f)} y1={PAD.t} y2={H - PAD.b} className="stroke-zinc-800/70" />
                     <text x={xOf(f)} y={H - 8} textAnchor="middle" className="fill-zinc-400 text-[11px]">{f}</text>
                 </g>
             ))}
