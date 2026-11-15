@@ -1,5 +1,5 @@
 import type { ClosedBox, DriverTS, DriverType } from "./types.ts";
-import { QTC_OVERDAMPED_BELOW, QTC_OK_MAX, QTC_PEAKY_MAX, VB_MIN_L, VB_MAX_L, XMAX_SUB_MIN_MM, DEFAULT_CROSSOVER_HZ } from "../test/core/constants.ts";
+import { QTC_OVERDAMPED_BELOW, QTC_OK_MAX, QTC_PEAKY_MAX, VB_MIN_L, VB_MAX_L, XMAX_SUB_MIN_MM, DEFAULT_CROSSOVER_HZ } from "./constants.ts";
 export type WarningLevel = "info" | "warn" | "error";
 
 export type WarningCode =
@@ -11,6 +11,7 @@ export type WarningCode =
     | "fc_above_crossover"
     | "xmax_small"
     | "wrong_type_for_box"
+    | "port_velocity_unknown"
     | "port_velocity_high"
     | "port_too_short";
 
@@ -38,11 +39,11 @@ interface Ctx {
 
 const TEXTS: Record<WarningCode, (c: Ctx) => string> = {
     qtc_overdamped: (c) =>
-        `Qtc ${c.qtc.toFixed(2)}: бас сухой и тихий. Ящик, возможно, слишком большой для этого динамика.`,
+        `Qtc ${c.qtc.toFixed(2)}: плавный спад без резонансного подъёма; это вариант настройки, а не ошибка.`,
     qtc_peaky: (c) =>
-        `Qtc ${c.qtc.toFixed(2)}: заметный подъём на низах, бас может бубнить. Можно немного уменьшить Vb.`,
+        `Qtc ${c.qtc.toFixed(2)}: есть резонансный подъём. Чтобы снизить Qtc, увеличь Vb.`,
     qtc_very_peaky: (c) =>
-        `Qtc ${c.qtc.toFixed(2)}: сильный горб, бас неровный и окрашенный. Ящик слишком маленький, увеличь Vb.`,
+        `Qtc ${c.qtc.toFixed(2)}: есть резонансный подъём. Для более ровной АЧХ увеличь Vb; высокая Qtc сама по себе допустима.`,
     vb_too_small: (c) =>
         `Vb ${c.vb} л: очень маленький ящик. Проверь единицы: объём в литрах, а не в см³.`,
     vb_too_large: (c) =>
@@ -54,6 +55,7 @@ const TEXTS: Record<WarningCode, (c: Ctx) => string> = {
     wrong_type_for_box: () =>
         `Закрытый ящик не подходит для твитера: динамик не рассчитан на такой объём.`,
     // тексты порта хранятся в portedBox.ts, здесь только для полноты типа
+    port_velocity_unknown: () => "",
     port_velocity_high: () => "",
     port_too_short: () => "",
 };
@@ -71,7 +73,7 @@ export function checkClosedBox(input: BoxCheckInput): BoxWarning[] {
 
     const q = box.qtc;
     if (q < QTC_OVERDAMPED_BELOW) push("qtc_overdamped", "info");
-    else if (q > QTC_PEAKY_MAX) push("qtc_very_peaky", "error");
+    else if (q > QTC_PEAKY_MAX) push("qtc_very_peaky", "warn");
     else if (q > QTC_OK_MAX) push("qtc_peaky", "warn");
 
     if (vb < VB_MIN_L) push("vb_too_small", "warn");

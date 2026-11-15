@@ -11,12 +11,12 @@ interface Props {
     warnings: BoxWarning[];
 }
 
-/** Предупреждения из checkClosedBox. Пустой список - ящик в норме. */
+/** Акустические предупреждения; геометрия проверяется отдельно. */
 export function WarningBar({ warnings }: Props) {
     if (warnings.length === 0) {
         return (
             <div className={`rounded border-l-4 ${BORDER.ok} bg-zinc-900 px-3 py-2`}>
-                Ящик в норме по расчёту.
+                По акустическому расчёту предупреждений нет.
             </div>
         );
     }

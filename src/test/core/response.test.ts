@@ -81,3 +81,18 @@ describe("freqFromX", () => {
         expect(freqFromX(640, 0, 640)).toBeCloseTo(F_MAX_HZ, 10);
     });
 });
+describe("audit: peaks and cursor bounds", () => {
+    it("does not label a rising right-hand boundary as an in-band resonance peak", () => {
+        expect(findPeak(400, 10)).toBeNull();
+    });
+    it("does not label a falling left-hand boundary as an in-band resonance peak", () => {
+        expect(findPeak(5, 10)).toBeNull();
+    });
+    it("keeps cursor frequencies inside the plotted range", () => {
+        expect(freqFromX(-100, 0, 640)).toBeCloseTo(10, 10);
+        expect(freqFromX(1000, 0, 640)).toBeCloseTo(300, 10);
+    });
+    it("rejects a zero-width cursor axis", () => {
+        expect(() => freqFromX(1, 0, 0)).toThrow();
+    });
+});

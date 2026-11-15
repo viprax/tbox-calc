@@ -112,3 +112,18 @@ describe("derive: недостающие данные", () => {
         expect(JSON.stringify(input)).toBe(snapshot);
     });
 });
+describe("audit: invalid driver data", () => {
+    it.each(["fs", "qts", "vas", "sd", "xmax", "qms", "qes", "mms"] as const)("rejects nonpositive %s", (field) => {
+        expect(() => derive({ ts: { [field]: 0 }, sources: {} })).toThrow(new RegExp(field));
+        expect(() => derive({ ts: { [field]: -1 }, sources: {} })).toThrow(new RegExp(field));
+    });
+    it("treats nonfinite values as missing rather than usable data", () => {
+        const result = derive({ ts: { fs: NaN, qts: Infinity }, sources: {} });
+        expect(result.missing).toContain("fs");
+        expect(result.missing).toContain("qts");
+    });
+    it("rejects invalid tolerances", () => {
+        expect(() => derive({ ts: {}, sources: {} }, -1)).toThrow(/tolerance/);
+        expect(() => derive({ ts: {}, sources: {} }, NaN)).toThrow(/tolerance/);
+    });
+});

@@ -1,18 +1,16 @@
 import { useMemo, useState, type MouseEvent } from "react";
+import { dbScale } from "../core/chartScale";
 import { sampleResponse } from "../core/closedBox";
 import { CABIN_GAIN_DEFAULT, type CabinGain } from "../core/cabinGain";
 import { F_MAX_HZ, F_MIN_HZ, findPeak, freqFromX, levelAt, shiftFreq } from "../core/response";
 
 const W = 640, H = 320;
 const PAD = { l: 44, r: 12, t: 12, b: 28 };
-const DB_MIN = -24, DB_MAX = 6;
 const X_TICKS = [10, 20, 30, 50, 100, 200];
-const Y_TICKS = [6, 0, -6, -12, -18, -24];
 
 const xOf = (f: number) =>
     PAD.l + ((Math.log(f) - Math.log(F_MIN_HZ)) / (Math.log(F_MAX_HZ) - Math.log(F_MIN_HZ))) * (W - PAD.l - PAD.r);
-const yOf = (db: number) =>
-    PAD.t + ((DB_MAX - Math.max(DB_MIN, Math.min(DB_MAX, db))) / (DB_MAX - DB_MIN)) * (H - PAD.t - PAD.b);
+
 
 interface Props {
     fc: number;
@@ -24,20 +22,13 @@ type Line = { f: number };
 
 export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
     const [hover, setHover] = useState<number | null>(null);
-    const [lines, setLines] = useState<Line[]>([]);
-    const [activeFreq, setActiveFreq] = useState<number | null>(null);
+    const [{ lines, activeLine }, setMeasurement] = useState<{ lines: Line[]; activeLine: number | null }>({ lines: [], activeLine: null });
 
     const pts = useMemo(() => sampleResponse(fc, qtc, F_MIN_HZ, F_MAX_HZ, 200), [fc, qtc]);
-    const d = useMemo(
-        () =>
-            pts
-                .map((p, i) => {
-                    const db = levelAt(p.f, fc, qtc, cabin);
-                    return `${i === 0 ? "M" : "L"}${xOf(p.f).toFixed(1)},${yOf(db).toFixed(1)}`;
-                })
-                .join(" "),
-        [pts, fc, qtc, cabin],
-    );
+    const levels = useMemo(() => pts.map((p) => ({ f: p.f, db: levelAt(p.f, fc, qtc, cabin) })), [pts, fc, qtc, cabin]);
+    const axis = useMemo(() => dbScale([...levels.map((p) => p.db), ...(cabin.enabled ? pts.map(p => p.db) : [])]), [levels, pts, cabin.enabled]);
+    const yOf = (db: number) => PAD.t + (axis.max - db) / (axis.max - axis.min) * (H - PAD.t - PAD.b);
+    const d = levels.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.f).toFixed(1)},${yOf(p.db).toFixed(1)}`).join(" ");
 
     const peak = useMemo(
         () => findPeak(fc, qtc, cabin.enabled ? cabin : undefined),
@@ -56,28 +47,25 @@ export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
     const onClick = (e: MouseEvent<SVGSVGElement>) => {
         if (e.button !== 0) return;
         const f = toFreq(svgX(e));
-        setLines((prev) => {
-            if (prev.length < 2) return [...prev, { f }];
-            // третий клик переносит первую линию на новое место
-            return [{ f }, prev[1]];
-        });
-        setActiveFreq(f);
+        setMeasurement((previous) => ({
+            lines: previous.lines.length < 2 ? [...previous.lines, { f }] : [{ f }, previous.lines[1]],
+            activeLine: previous.lines.length < 2 ? previous.lines.length : 0,
+        }));
     };
 
     const onContext = (e: MouseEvent<SVGSVGElement>) => {
         e.preventDefault();
-        setLines([]);
-        setActiveFreq(null);
+        setMeasurement({ lines: [], activeLine: null });
     };
 
     const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
-        const base = activeFreq ?? hover ?? fc;
+        const base = activeLine === null ? hover ?? fc : lines[activeLine].f;
         let next: number | null = null;
         if (e.key === "ArrowRight") next = shiftFreq(base, 1);
         if (e.key === "ArrowLeft") next = shiftFreq(base, -1);
         if (next !== null) {
             e.preventDefault();
-            setActiveFreq(next);
+            setMeasurement(previous => previous.activeLine === null ? previous : { ...previous, lines: previous.lines.map((line, index) => index === previous.activeLine ? { f: next } : line) });
             setHover(next);
         }
     };
@@ -98,7 +86,10 @@ export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
             onContextMenu={onContext}
             onKeyDown={onKey}
         >
-            {Y_TICKS.map((db) => (
+            <desc>Частота в герцах по горизонтали, относительный уровень в децибелах по вертикали.</desc>
+            <text x="6" y="24" className="fill-zinc-400 text-[10px]">дБ</text>
+            <text x={W - PAD.r} y={H - 8} textAnchor="end" className="fill-zinc-400 text-[10px]">Гц</text>
+            {axis.ticks.map((db) => (
                 <g key={db}>
                     <line x1={PAD.l} x2={W - PAD.r} y1={yOf(db)} y2={yOf(db)}
                           className={db === 0 ? "stroke-zinc-400/60" : "stroke-zinc-700"} />
@@ -113,7 +104,8 @@ export function ResponseChart({ fc, qtc, cabin = CABIN_GAIN_DEFAULT }: Props) {
             ))}
 
             <line x1={PAD.l} x2={W - PAD.r} y1={yOf(-3)} y2={yOf(-3)} className="stroke-zinc-400/60 [stroke-dasharray:4_4]" />
-            <path d={d} fill="none" className="stroke-orange-400 stroke-[2.5]" />
+            {cabin.enabled && <path data-curve="base" d={pts.map((p, i) => `${i === 0 ? "M" : "L"}${xOf(p.f).toFixed(1)},${yOf(p.db).toFixed(1)}`).join(" ")} fill="none" className="stroke-zinc-400 stroke-[1.5] [stroke-dasharray:5_4]" />}
+            <path data-curve={cabin.enabled ? "cabin" : "base"} d={d} fill="none" className="stroke-orange-400 stroke-[2.5]" />
 
             {peak && (
                 <g>

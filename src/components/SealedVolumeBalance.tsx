@@ -1,0 +1,28 @@
+import type { ReturnTypeOfSealedEvaluation } from "../state/evaluateSealedDraft";
+import type { SealedBoxDraft } from "../state/sealedDraft";
+
+export function SealedVolumeBalance({ draft, model, onExpert, onAccept }: { draft: SealedBoxDraft; model: ReturnTypeOfSealedEvaluation; onExpert: () => void; onAccept: () => void }) {
+    const box = model.calculation?.dimensions;
+    if (!box) return null;
+    const known = model.netVolumeKnown;
+    const approximate = draft.displacementSource === "estimate";
+    const delta = box.volumeL - draft.vb;
+    return <section aria-label="Баланс объёма" className="overflow-hidden rounded-[1.75rem] border border-orange-500/20 bg-zinc-950 shadow-[0_22px_70px_-48px_rgba(249,115,22,0.55)]">
+        <div className="grid lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+            <div className="grid content-between gap-8 border-b border-orange-500/15 bg-[radial-gradient(ellipse_at_top_left,rgba(249,115,22,0.22),transparent_68%)] p-6 sm:p-8 lg:border-b-0 lg:border-r">
+                <div><p className="text-sm font-medium text-orange-300">Целевой чистый объём</p><h2 className="mt-2 text-5xl font-semibold leading-none tracking-[-0.06em] tabular-nums text-white sm:text-6xl">{draft.vb.toFixed(2)} <span className="text-3xl font-medium tracking-[-0.03em] text-orange-300">л</span></h2><p className="mt-4 text-xs text-zinc-400">Цель: {draft.vb.toFixed(2)} л чистого объёма</p></div>
+                <span className={`w-fit rounded-full border px-3 py-1.5 text-xs font-medium ${!known || !model.targetMatches ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-zinc-700 bg-zinc-800 text-zinc-200"}`}>{!known ? "Вытеснение не задано" : approximate ? "Расчёт с оценкой вытеснения" : "Расчёт по заданным размерам"}</span>
+            </div>
+            <dl className="grid content-center gap-5 p-6 text-sm sm:grid-cols-2 sm:p-8">
+                <div><dt className="text-zinc-400">{draft.mode === "simple" ? "Итоговый объём корпуса" : "Внутренняя полость"}</dt><dd className="mt-2 text-3xl font-semibold tracking-[-0.04em] tabular-nums text-zinc-100">{box.grossVolumeL.toFixed(2)} <span className="text-lg text-zinc-400">л</span></dd><p className="mt-1 text-xs leading-5 text-zinc-500">До установки динамика и деталей</p></div>
+                <div><dt className="text-zinc-400">{known ? draft.mode === "simple" ? "Объём для воздуха" : "Расчётный чистый Vb" : draft.mode === "simple" ? "Чистый объём пока неизвестен" : "Чистый Vb пока неизвестен"}</dt><dd className="mt-2 text-3xl font-semibold tracking-[-0.04em] tabular-nums text-zinc-100">{known ? `${box.volumeL.toFixed(2)} л` : "—"}</dd><p className="mt-1 text-xs leading-5 text-zinc-500">{known ? approximate ? "Зависит от точности введённого вытеснения" : "Уточните размеры и вычеты перед изготовлением" : "Нулевой вычет не означает нулевой объём динамика"}</p></div>
+                <div className="border-t border-zinc-800 pt-4 sm:col-span-2"><dt className="text-zinc-400">{draft.mode === "simple" ? "Вычитаем из общего объёма" : "Вычитаем из полости"}</dt><dd className="mt-2 tabular-nums text-zinc-200">Динамик: {known ? `${draft.driverDisplacementL!.toFixed(2)} л` : "неизвестно"}<span className="mx-2 text-zinc-600">/</span>Распорки и детали: {draft.bracesDisplacementL.toFixed(2)} л</dd></div>
+            </dl>
+        </div>
+        {(!known || !model.targetMatches || (draft.mode === "expert" && model.minimumGrossL !== null && Number.isFinite(model.minimumGrossL))) && <div className="border-t border-zinc-800 px-6 py-5 sm:px-8">
+        {!known ? <div className="grid gap-2 border-l-2 border-amber-500 pl-3 text-sm text-amber-200"><p>{draft.mode === "simple" ? `График показывает прогноз для выбранных ${draft.vb.toFixed(2)} л. По текущим размерам получается ${box.grossVolumeL.toFixed(2)} л до вычета динамика. Укажите его объём, чтобы проверить реальный результат.` : `Без вычета динамика АЧХ предварительно рассчитана по ${box.volumeL.toFixed(2)} л. Значение ${draft.vb.toFixed(2)} л — ваша цель, а не подтверждённый результат.`}</p><button type="button" onClick={onExpert} className="justify-self-start text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-orange-400">Указать вытеснение и проверить корпус</button></div>
+            : !model.targetMatches && <div className="grid gap-2 border-l-2 border-amber-500 pl-3 text-sm text-amber-200"><p>По габаритам получается {box.volumeL.toFixed(2)} л: {delta > 0 ? "больше" : "меньше"} цели на {Math.abs(delta).toFixed(2)} л. График рассчитан по этому объёму.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={onAccept} className="rounded-md border border-amber-600/60 px-3 py-2 text-left text-xs hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-orange-400">Принять расчётный объём {box.volumeL.toFixed(2)} л</button><button type="button" onClick={onExpert} className="rounded-md border border-zinc-700 px-3 py-2 text-xs hover:border-orange-400 focus-visible:outline-2 focus-visible:outline-orange-400">Изменить конструкцию</button></div></div>}
+        {draft.mode === "expert" && model.minimumGrossL !== null && Number.isFinite(model.minimumGrossL) && <p className="text-xs text-zinc-400">При выбранных запасах и центральной установке минимальная прямоугольная полость — около {model.minimumGrossL.toFixed(2)} л{known ? model.minimumGrossL > draft.driverDisplacementL! + draft.bracesDisplacementL ? `, после текущих вычетов — ${(model.minimumGrossL - draft.driverDisplacementL! - draft.bracesDisplacementL).toFixed(2)} л` : "; текущие вычеты требуют полости большего объёма" : " до вычета оборудования"}. Ограничения багажника и ручные размеры проверяются отдельно.</p>}
+        </div>}
+    </section>;
+}

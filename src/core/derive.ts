@@ -1,7 +1,7 @@
-import { assertPositive } from "./assert.ts";
+import { assertInRange, assertPositive } from "./assert.ts";
 import type { DeriveResult, DeriveWarning, DriverSourceMap, DriverTS, FieldMeta } from "./types.ts";
 import { litersToM3, m3ToLiters } from "./units.ts";
-import { AIR_DENSITY_KG_M3, SPEED_OF_SOUND_M_S, DEFAULT_TOLERANCE } from "../test/core/constants.ts";
+import { AIR_DENSITY_KG_M3, SPEED_OF_SOUND_M_S, DEFAULT_TOLERANCE } from "./constants.ts";
 
 const CM2_PER_M2 = 10_000;
 const G_PER_KG = 1_000;
@@ -86,6 +86,7 @@ function conflictWarning(
 }
 
 export function derive(input: DeriveInput, tolerance = DEFAULT_TOLERANCE): DeriveResult {
+    assertInRange("tolerance", tolerance, 0, 1);
     const ts: Partial<DriverTS> = {};
     const sources: DriverSourceMap = {};
 
@@ -93,6 +94,8 @@ export function derive(input: DeriveInput, tolerance = DEFAULT_TOLERANCE): Deriv
         const value = input.ts[key];
         if (!isNum(value)) continue;
         if (input.sources[key]?.source === "derived") continue;
+        if (key === "le") assertInRange(key, value, 0, Number.MAX_VALUE);
+        else assertPositive(key, value);
         ts[key] = value;
         const meta = input.sources[key];
         if (meta) sources[key] = meta;

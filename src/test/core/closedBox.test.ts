@@ -30,10 +30,10 @@ describe("closedBox: свойства", () => {
         expect(box.peakDb).toBe(0);
     });
 
-    it("f3 выше fc при Qtc ниже 1/√2 не выполняется в общем случае: проверяем, что f3 положительна и конечна", () => {
-        const box = closedBox(ts, 20);
-        expect(Number.isFinite(box.f3)).toBe(true);
-        expect(box.f3).toBeGreaterThan(0);
+    it("f3 выше fc при Qtc ниже 1/√2", () => {
+        const box = closedBox(ts, 40);
+        expect(box.qtc).toBeLessThan(Math.SQRT1_2);
+        expect(box.f3).toBeGreaterThan(box.fc);
     });
 
     it("на частоте f3 уровень ровно -3 дБ", () => {
@@ -146,20 +146,61 @@ describe("closedBox: потери в ящике (Ql)", () => {
         expect(closedBox(ts, 20, 10).fc).toBeCloseTo(closedBox(ts, 20, Infinity).fc, 10);
     });
 
-    it("совпадает с WinISD (Ql = 10) на четырёх объёмах", () => {
-        expect(closedBox(ts, 10).qtc).toBeCloseTo(0.646, 2);
-        expect(closedBox(ts, 20).qtc).toBeCloseTo(0.500, 2);
-        expect(closedBox(ts, 40).qtc).toBeCloseTo(0.405, 2);
-        expect(closedBox(ts, 7.96).qtc).toBeCloseTo(0.707, 2);
+    it("явная упрощённая модель Ql = 10 на четырёх объёмах", () => {
+        expect(closedBox(ts, 10, 10).qtc).toBeCloseTo(0.646, 2);
+        expect(closedBox(ts, 20, 10).qtc).toBeCloseTo(0.500, 2);
+        expect(closedBox(ts, 40, 10).qtc).toBeCloseTo(0.405, 2);
+        expect(closedBox(ts, 7.96, 10).qtc).toBeCloseTo(0.707, 2);
     });
 
-    it("совпадает с WinISD по fc и f3", () => {
-        expect(closedBox(ts, 10).fc).toBeCloseTo(79.6, 1);
-        expect(closedBox(ts, 20).fc).toBeCloseTo(60.8, 1);
-        expect(closedBox(ts, 40).fc).toBeCloseTo(48.7, 1);
-        expect(closedBox(ts, 10).f3).toBeCloseTo(87.9, 0);
-        expect(closedBox(ts, 20).f3).toBeCloseTo(94.3, 0);
-        expect(closedBox(ts, 40).f3).toBeCloseTo(101.3, 0);
+    it("контрольные fc и f3 при явном Ql = 10", () => {
+        expect(closedBox(ts, 10, 10).fc).toBeCloseTo(79.6, 1);
+        expect(closedBox(ts, 20, 10).fc).toBeCloseTo(60.8, 1);
+        expect(closedBox(ts, 40, 10).fc).toBeCloseTo(48.7, 1);
+        expect(closedBox(ts, 10, 10).f3).toBeCloseTo(87.9, 0);
+        expect(closedBox(ts, 20, 10).f3).toBeCloseTo(94.3, 0);
+        expect(closedBox(ts, 40, 10).f3).toBeCloseTo(101.3, 0);
     });
 });
 
+
+describe("audit: independent sealed-box references", () => {
+    const driver = { fs: 30, qts: 0.4, vas: 30, sd: 300, xmax: 8 };
+    it("uses the ideal sealed model unless extra damping is explicitly requested", () => {
+        const box = closedBox(driver, 10);
+        expect(box.fc).toBe(60);
+        expect(box.qtc).toBeCloseTo(0.8, 12);
+        expect(box.f3).toBeCloseTo(53.82960481636, 8);
+        expect(box.peakDb).toBeCloseTo(0.21295340941, 8);
+    });
+    it("inverts the same explicit damping model as the forward calculation", () => {
+        const volume = vbForQtc(driver, 0.7, 10);
+        expect(volume).toBeCloseTo(11.80697124135, 8);
+        expect(closedBox(driver, volume!, 10).qtc).toBeCloseTo(0.7, 12);
+    });
+    it("rejects unreachable damping targets", () => {
+        expect(vbForQtc(driver, 10, 10)).toBeNull();
+        expect(vbForQtc(driver, 0.39, 10)).toBeGreaterThan(0);
+    });
+    it("keeps f3 finite for a small positive Q instead of squaring to infinity", () => {
+        expect(f3Of(50, 1e-8)).toBeCloseTo(5e9, 0);
+        expect(f3Of(50, 1e8)).toBeCloseTo(32.17971264528, 8);
+    });
+    it("preserves the high-frequency asymptote over large finite frequency ratios", () => {
+        expect(responseDb(1e100, 50, 0.7)).toBeCloseTo(0, 10);
+        expect(Number.isFinite(responseDb(1e-100, 50, 0.7))).toBe(true);
+    });
+    it.each([0, 1, -2, 2.5, NaN, Infinity, 100_001])("rejects invalid sample count %s", (n) => {
+        expect(() => sampleResponse(50, 0.7, 10, 300, n)).toThrow(/points/);
+    });
+    it("rejects reversed or collapsed sample intervals", () => {
+        expect(() => sampleResponse(50, 0.7, 300, 10)).toThrow(/fMax/);
+        expect(() => sampleResponse(50, 0.7, 10, 10)).toThrow(/fMax/);
+    });
+});
+
+describe("review: subnormal positive damping", () => {
+    it("keeps the resonance level finite even when a reciprocal Q overflows", () => {
+        expect(responseDb(50, 50, Number.MIN_VALUE)).toBeCloseTo(-6466.124306862, 6);
+    });
+});

@@ -1,3 +1,5 @@
+import { assertFinite, assertPositive } from "./assert";
+
 /**
  * Подъём низких частот из-за салона автомобиля (cabin gain).
  * Условная модель: гладкий колокол по логарифму частоты вокруг центра подъёма.
@@ -10,7 +12,7 @@ export interface CabinGain {
     boostDb: number;
     /** Частота центра подъёма, Гц. */
     centerHz: number;
-    /** Ширина колокола в октавах (на уровне 1/e). */
+    /** Ширина колокола в октавах (на уровне exp(-1/2)). */
     widthOct: number;
 }
 
@@ -24,6 +26,10 @@ export const CABIN_GAIN_DEFAULT: CabinGain = {
 /** Поправка салона в дБ на частоте f. Гладкая по всей оси, без изломов. */
 export function cabinGainDb(f: number, cg: CabinGain): number {
     if (!cg.enabled) return 0;
+    assertPositive("f", f);
+    assertPositive("centerHz", cg.centerHz);
+    assertPositive("widthOct", cg.widthOct);
+    assertFinite("boostDb", cg.boostDb);
     const octaves = Math.log2(f / cg.centerHz);
     return cg.boostDb * Math.exp(-(octaves * octaves) / (2 * cg.widthOct * cg.widthOct));
 }

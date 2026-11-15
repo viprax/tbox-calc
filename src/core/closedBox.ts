@@ -1,27 +1,34 @@
-import { assertPositive } from "./assert.ts";
+import { assertInRange, assertPositive, InvalidInputError } from "./assert.ts";
 import type { ClosedBox, DriverTS } from "./types.ts";
 
 
 export function f3Of(fc: number, qtc: number): number {
     assertPositive("fc", fc);
     assertPositive("qtc", qtc);
-    const a = 1 / (qtc * qtc) - 2;
-    return fc * Math.sqrt((a + Math.sqrt(a * a + 4)) / 2);
+    // Avoid cancellation for large Q and overflow of 1/Q² for small Q.
+    if (qtc < 1) {
+        const q2 = qtc * qtc;
+        const a = 1 - 2 * q2;
+        return (fc / qtc) * Math.sqrt((a + Math.hypot(a, 2 * q2)) / 2);
+    }
+    const a = (1 / qtc) ** 2 - 2;
+    return fc * Math.sqrt(2 / (Math.hypot(a, 2) - a));
 }
 
 export function peakDbOf(qtc: number): number {
     assertPositive("qtc", qtc);
     if (qtc < Math.SQRT1_2) return 0;
-    return 20 * Math.log10((qtc * qtc) / Math.sqrt(qtc * qtc - 0.25));
+    return Math.max(0, 20 * Math.log10(qtc) - 10 * Math.log10(1 - (0.5 / qtc) ** 2));
 }
 
-/** Добротность потерь ящика по умолчанию, как в WinISD. */
-export const QL_DEFAULT = 10;
+/** Без дополнительных потерь: идеальная модель закрытого ящика. */
+export const QL_DEFAULT = Infinity;
 
 /**
  * Расчёт закрытого ящика.
- * ql - добротность потерь ящика. Infinity = без потерь.
- * 1/Qtc = 1/Qtc0 + 1/Ql, как в WinISD.
+ * ql — опциональная упрощённая добавочная добротность при fc.
+ * 1/Qtc = 1/Qtc0 + 1/Ql; это не полная модель утечек корпуса.
+ * По умолчанию Infinity: без неподтверждённой поправки.
  */
 export function closedBox(ts: DriverTS, vb: number, ql: number = QL_DEFAULT): ClosedBox {
     assertPositive("fs", ts.fs);
@@ -43,16 +50,26 @@ export function responseDb(f: number, fc: number, qtc: number): number {
     assertPositive("f", f);
     assertPositive("fc", fc);
     assertPositive("qtc", qtc);
-    const x2 = (f / fc) ** 2;
-    return 20 * Math.log10(x2 / Math.sqrt((1 - x2) ** 2 + x2 / (qtc * qtc)));
+    const logX = Math.log(f) - Math.log(fc);
+    const x = Math.exp(-Math.abs(logX));
+    // Evaluate the denominator in log space, including subnormal positive Q.
+    const logA = Math.log1p(-x * x);
+    const logB = -Math.abs(logX) - Math.log(qtc);
+    const scale = Math.max(logA, logB);
+    const logDenom = scale + 0.5 * Math.log(Math.exp(2 * (logA - scale)) + Math.exp(2 * (logB - scale)));
+    return ((logX < 0 ? 40 * logX : 0) - 20 * logDenom) / Math.LN10;
 }
 
-export function vbForQtc(ts: DriverTS, targetQtc: number): number | null {
+export function vbForQtc(ts: DriverTS, targetQtc: number, ql: number = QL_DEFAULT): number | null {
     assertPositive("qts", ts.qts);
     assertPositive("vas", ts.vas);
     assertPositive("targetQtc", targetQtc);
-    if (targetQtc <= ts.qts) return null;
-    return ts.vas / ((targetQtc / ts.qts) ** 2 - 1);
+    const invQl = ql === Infinity ? 0 : 1 / assertPositive("ql", ql);
+    const invIdealQ = 1 / targetQtc - invQl;
+    if (invIdealQ <= 0) return null;
+    const idealQ = 1 / invIdealQ;
+    if (idealQ <= ts.qts) return null;
+    return ts.vas / ((idealQ / ts.qts) ** 2 - 1);
 }
 
 export function sampleResponse(
@@ -66,6 +83,9 @@ export function sampleResponse(
     assertPositive("qtc", qtc);
     assertPositive("fMin", fMin);
     assertPositive("fMax", fMax);
+    if (fMax <= fMin) throw new InvalidInputError("fMax: должно быть больше fMin");
+    assertInRange("points", points, 2, 100_000);
+    if (!Number.isInteger(points)) throw new InvalidInputError("points: ожидалось целое число");
     const out: { f: number; db: number }[] = [];
     const lo = Math.log(fMin);
     const hi = Math.log(fMax);

@@ -32,18 +32,18 @@ describe("scaleFor", () => {
 
 describe("innerCapOf", () => {
     it("ширина и высота: максимум минус две стенки", () => {
-        expect(innerCapOf("w", 60, 1.8, 0)).toBeCloseTo(56.4, 6);
+        expect(innerCapOf("w", 60, 1.8)).toBeCloseTo(56.4, 6);
     });
 
-    it("глубина дополнительно вычитает Dm", () => {
-        expect(innerCapOf("d", 40, 1.8, 5)).toBeCloseTo(31.4, 6);
+    it("глубина не вычитает установочную глубину из воздушной полости", () => {
+        expect(innerCapOf("d", 40, 1.8)).toBeCloseTo(36.4, 6);
     });
 });
 
 describe("outerFromInner", () => {
-    it("внешние размеры: внутренние плюс стенки, глубина ещё плюс Dm", () => {
-        const outer = outerFromInner({ w: 30, h: 30, d: 30 }, 1.8, 5);
-        expect(outer).toEqual({ w: 33.6, h: 33.6, d: 38.6 });
+    it("внешние размеры: внутренние плюс стенки", () => {
+        const outer = outerFromInner({ w: 30, h: 30, d: 30 }, 1.8);
+        expect(outer).toEqual({ w: 33.6, h: 33.6, d: 33.6 });
     });
 });
 
@@ -125,7 +125,7 @@ describe("solveBoxDimensions: ниша", () => {
     it("глубина с Dm учитывается при проверке ниши", () => {
         const withoutDm = solveBoxDimensions({ vbNetL: 20, maxOuterCm: { d: 35 } });
         const withDm = solveBoxDimensions({ vbNetL: 20, maxOuterCm: { d: 35 }, dmCm: 8 });
-        expect(withDm.innerCm.d).toBeLessThan(withoutDm.innerCm.d);
+        expect(withDm.innerCm.d).toBe(withoutDm.innerCm.d);
         expect(withDm.outerCm.d).toBeLessThanOrEqual(35 + 1e-9);
     });
 });
@@ -137,5 +137,86 @@ describe("входная проверка", () => {
 
     it("отрицательный Dm не проходит", () => {
         expect(() => solveBoxDimensions({ vbNetL: 30, dmCm: -1 })).toThrow(/dmCm/);
+    });
+});
+describe("audit: usable enclosure dimensions", () => {
+    it("adds driver displacement to gross volume and reports true net volume", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, displacementL: 3 });
+        expect(volumeLiters(box.innerCm)).toBeCloseTo(30, 0);
+        expect(box.volumeL).toBeCloseTo(27, 0);
+        expect(box.fits).toBe(true);
+    });
+    it("redistributes volume to unconstrained sides rather than throwing usable space away", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, fixedInnerCm: { h: 30 }, maxOuterCm: { w: 23.6 } });
+        expect(box.innerCm).toEqual({ w: 20, h: 30, d: 45 });
+        expect(box.volumeL).toBeCloseTo(27, 10);
+        expect(box.fits).toBe(true);
+    });
+    it("rounds a capped side down instead of exceeding a niche by half a millimetre", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, maxOuterCm: { w: 23.66 } });
+        expect(box.outerCm.w).toBeLessThanOrEqual(23.66);
+        expect(box.fits).toBe(true);
+    });
+    it("honours a deep driver's clearance while preserving net volume", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, dmCm: 36.8 });
+        expect(box.innerCm.d).toBeGreaterThanOrEqual(35);
+        expect(box.outerCm.d - box.innerCm.d).toBeCloseTo(3.6, 10);
+        expect(box.fits).toBe(true);
+    });
+    it("reports insufficient driver clearance for a fixed depth", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, dmCm: 40, fixedInnerCm: { d: 30 } });
+        expect(box.fits).toBe(false);
+        expect(box.reasons.join(" ")).toMatch(/глубин/);
+    });
+    it("never returns negative dimensions when walls do not fit inside a niche", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, maxOuterCm: { w: 2 } });
+        expect(box.fits).toBe(false);
+        expect(box.innerCm.w).toBeGreaterThan(0);
+        expect(box.volumeL).toBeGreaterThan(0);
+    });
+    it.each([
+        { fixedInnerCm: { w: 0 } }, { fixedInnerCm: { h: -1 } },
+        { fixedInnerCm: { d: Infinity } }, { ratio: [1, 0, 1] as [number, number, number] },
+        { ratio: [NaN, 1, 1] as [number, number, number] }, { maxOuterCm: { w: NaN } },
+        { displacementL: -1 }, { displacementL: Infinity },
+    ])("rejects invalid geometry %o", (bad) => {
+        expect(() => solveBoxDimensions({ vbNetL: 27, ...bad })).toThrow();
+    });
+});
+
+describe("review: impossible equipment and fractional-millimetre shortage", () => {
+    it("reports the actual fractional-millimetre shortage", () => {
+        const box = solveBoxDimensions({ vbNetL: 27, fixedInnerCm: { w: 20.06, h: 30 }, maxOuterCm: { w: 23.66 } });
+        expect(box.fits).toBe(false);
+        expect(box.reasons.join(" ")).toContain("0.4 мм");
+    });
+    it("reports no usable air volume when equipment cannot fit", () => {
+        const box = solveBoxDimensions({ vbNetL: 1, displacementL: 3, maxOuterCm: { w: 10, h: 10, d: 10 } });
+        expect(box.fits).toBe(false);
+        expect(box.volumeL).toBe(0);
+        expect(box.reasons.join(" ")).toMatch(/вытеснение/);
+    });
+});
+
+describe("restored driver front-panel constraints", () => {
+    it("fits a 15-inch driver with edge allowance while preserving the net target", () => {
+        const box = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: 411 });
+        expect(box.outerCm.w * 10).toBeGreaterThanOrEqual(411);
+        expect(box.outerCm.h * 10).toBeGreaterThanOrEqual(411);
+        expect(box.volumeL).toBeCloseTo(20, 1);
+        expect(box.fits).toBe(true);
+    });
+    it("reports an undersized fixed front panel", () => {
+        const box = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: 411, fixedInnerCm: { w: 27.1 } });
+        expect(box.fits).toBe(false);
+        expect(box.reasons.join(" ")).toMatch(/передн/);
+    });
+});
+
+describe("restored front panel versus hard niche limits", () => {
+    it("reports a conflict without growing outside the available width", () => {
+        const box = solveBoxDimensions({ vbNetL: 20, minFrontOuterMm: 411, maxOuterCm: { w: 30 } });
+        expect(box.outerCm.w).toBeLessThanOrEqual(30);
+        expect(box.fits).toBe(false);
     });
 });

@@ -29,10 +29,10 @@ describe("Qtc", () => {
         expect(codes(run(15))).toContain("qtc_peaky");
     });
 
-    it("Qtc выше 0.9 даёт ошибку, а не только предупреждение", () => {
+    it("Qtc выше 0.9 даёт предупреждение о настройке", () => {
         const ws = run(5);
         expect(codes(ws)).toContain("qtc_very_peaky");
-        expect(hasErrors(ws)).toBe(true);
+        expect(hasErrors(ws)).toBe(false);
     });
 
     it("Qtc ниже 0.5 даёт информационное сообщение", () => {
@@ -101,5 +101,17 @@ describe("тип динамика", () => {
 describe("hasErrors", () => {
     it("возвращает false, если есть только предупреждения и информация", () => {
         expect(hasErrors(run(20))).toBe(false);
+    });
+});
+describe("audit: physically valid high-Q alignments", () => {
+    it("does not classify high Q as an invalid calculation", () => {
+        const ws = run(5);
+        expect(ws.find((w) => w.code === "qtc_very_peaky")?.level).toBe("warn");
+        expect(hasErrors(ws)).toBe(false);
+    });
+    it("recommends increasing volume to reduce Qtc", () => {
+        const warning = run(20).find((w) => w.code === "qtc_peaky")!;
+        expect(warning.message).toMatch(/увелич/i);
+        expect(closedBox(ts, 30).qtc).toBeLessThan(closedBox(ts, 20).qtc);
     });
 });

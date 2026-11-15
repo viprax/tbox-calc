@@ -12,6 +12,7 @@ export interface DriverSpec {
     type: DriverType;
     diameterInch?: number;
     mountingDepthCm?: number;
+    displacementL?: number;
     cutoutDiameterCm?: number;
     sensitivityDb?: number;
     nominalImpedanceOhm?: number;
@@ -41,13 +42,15 @@ export type ValueSource = "datasheet" | "measured" | "derived" | "user" | "winis
 
 export interface FieldMeta {
     source: ValueSource;
-    recordeAt?: string;
+    recordedAt?: string;
+    url?: string;
     note?: string;
 }
 
 export type DriverSourceMap = Partial<Record<keyof DriverTS, FieldMeta>>;
 
 export interface Driver {
+    geometry?: DriverGeometry;
     spec: DriverSpec;
     ts: DriverTS;
     sources: DriverSourceMap;
@@ -74,4 +77,12 @@ export interface ClosedBox {
     qtc: number;
     f3: number;
     peakDb: number;
+}
+/** Размеры динамика, сохранённые в рабочей версии владельца. */
+export interface DriverGeometry {
+    cutoutDiameterMm?: number;
+    magnetDiameterMm?: number;
+    mountingDepthMm?: number;
+    basketDepthMm?: number;
+    magnetDepthMm?: number;
 }

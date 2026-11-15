@@ -1,4 +1,3 @@
-// src/core/constants.ts
 /** Все пороги, допуски и справочные значения проекта. Меняются здесь, а не в коде функций. */
 
 // Единицы и физика
@@ -7,9 +6,9 @@ export const AIR_DENSITY_KG_M3 = 1.2;       // плотность воздуха
 export const SPEED_OF_SOUND_M_S = 343;      // скорость звука, м/с (для derive)
 
 // Порт
-export const END_CORRECTION_FACTOR = 1.7;   // поправка на концы трубы, Leff = Lv + k·r
-export const PORT_VELOCITY_WARN_MS = 17;    // скорость в порту, выше - шум
-export const PORT_MIN_LENGTH_CM = 2;        // короче - нестабильная настройка
+export const END_CORRECTION_FACTOR = 1.46;   // 0.85r у щита + 0.61r на свободном конце; только круглый порт
+export const PORT_VELOCITY_WARN_MS = 17;    // ориентировочный порог шума, не гарантия
+export const PORT_MIN_LENGTH_CM = 2;        // эвристический порог для проверки геометрии
 
 // Закрытый ящик и предупреждения
 export const QTC_OVERDAMPED_BELOW = 0.5;

@@ -1,3 +1,4 @@
+import { assertFinite, assertPositive } from "./assert";
 import { responseDb } from "./closedBox";
 import { cabinGainDb, type CabinGain } from "./cabinGain";
 
@@ -36,13 +37,17 @@ export function findPeak(fc: number, qtc: number, cabin?: CabinGain): Peak | nul
     const lo = Math.log(F_MIN_HZ);
     const hi = Math.log(F_MAX_HZ);
     let best: Peak = { f: F_MIN_HZ, db: -Infinity };
+    let bestIndex = 0;
     for (let i = 0; i < PEAK_GRID_POINTS; i++) {
         const f = Math.exp(lo + ((hi - lo) * i) / (PEAK_GRID_POINTS - 1));
         const db = levelAt(f, fc, qtc, cabin);
-        if (db > best.db) best = { f, db };
+        if (db > best.db) {
+            best = { f, db };
+            bestIndex = i;
+        }
     }
     // Горб считаем относительно полки на высоких частотах (0 дБ по формуле).
-    return best.db >= PEAK_MIN_DB ? best : null;
+    return bestIndex > 0 && bestIndex < PEAK_GRID_POINTS - 1 && best.db >= PEAK_MIN_DB ? best : null;
 }
 
 /** Сдвиг частоты на n шагов стрелками (логарифмически), с ограничением диапазона. */
@@ -53,6 +58,10 @@ export function shiftFreq(f: number, steps: number): number {
 
 /** Пиксель по оси X -> частота (логарифмическая шкала). */
 export function freqFromX(x: number, xMin: number, xMax: number): number {
-    const t = (x - xMin) / (xMax - xMin);
+    assertFinite("x", x);
+    assertFinite("xMin", xMin);
+    assertFinite("xMax", xMax);
+    assertPositive("axisWidth", xMax - xMin);
+    const t = Math.min(1, Math.max(0, (x - xMin) / (xMax - xMin)));
     return Math.exp(Math.log(F_MIN_HZ) + t * (Math.log(F_MAX_HZ) - Math.log(F_MIN_HZ)));
 }

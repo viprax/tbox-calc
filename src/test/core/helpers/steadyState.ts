@@ -1,11 +1,11 @@
 /**
  * Численное установившееся усиление ФВЧ 2-го порядка (закрытый ящик).
- * Интегрируем ФНЧ-уравнение RK4, ФВЧ получаем как 1 - ФНЧ.
+ * Интегрируем уравнение осциллятора RK4, ФВЧ получаем как ускорение / wc².
  */
 export function steadyStateHpGain(f: number, fc: number, qtc: number): number {
     const wc = 2 * Math.PI * fc;
     const w = 2 * Math.PI * f;
-    const dt = 1 / (f * 200);
+    const dt = 1 / (Math.max(f, fc) * 200);
     const steps = Math.ceil((30 / f) / dt);
 
     const deriv = (t: number, x: number, v: number): [number, number] => [
@@ -13,7 +13,7 @@ export function steadyStateHpGain(f: number, fc: number, qtc: number): number {
         -(wc / qtc) * v - wc * wc * x + wc * wc * Math.sin(w * t),
     ];
 
-    let x = 0, v = 0, t = 0, maxLp = 0, maxU = 0;
+    let x = 0, v = 0, t = 0, maxHp = 0;
     const measureFrom = Math.floor(steps * 0.7);
     for (let i = 0; i < steps; i++) {
         const h = dt;
@@ -25,11 +25,12 @@ export function steadyStateHpGain(f: number, fc: number, qtc: number): number {
         v += (h / 6) * (k1v + 2 * k2v + 2 * k3v + k4v);
         t += h;
         if (i >= measureFrom) {
-            maxLp = Math.max(maxLp, Math.abs(x));
-            maxU = Math.max(maxU, Math.abs(Math.sin(w * t)));
+            // Use simultaneous state values: subtracting separate amplitudes loses phase.
+            const hp = Math.sin(w * t) - x - v / (wc * qtc);
+            maxHp = Math.max(maxHp, Math.abs(hp));
         }
     }
-    return Math.abs(1 - maxLp / maxU);
+    return maxHp;
 }
 
 /** Установившаяся амплитуда ФНЧ-отклика x на синус u = sin(wt), численно (RK4). */
