@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { checkPort, lvForTuning, portedBox } from "../core/portedBox";
+import { checkPort, lvForTuning, portedBox, tuningHz } from "../core/portedBox";
 import { CABIN_GAIN_DEFAULT } from "../core/cabinGain";
 import { portedF3Hz } from "../core/portedResponse";
 import type { DriverTS } from "../core/types";
@@ -7,7 +7,7 @@ import { PresetSelect } from "../components/PresetSelect";
 import { DEFAULT_DRIVER } from "../data/drivers";
 import { FieldWithHint } from "../components/FieldWithHint";
 import { WarningBar } from "../components/WarningBar";
-import { PortedCompareChart } from "../components/PortedCompareCharts.tsx";
+import { PortedCompareChart } from "../components/PortedCompareCharts";
 
 const panel = "grid min-w-0 self-start content-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3";
 
@@ -25,13 +25,14 @@ export function PortedBoxPage() {
     const [spCm2, setSpCm2] = useState(491);
     const [lvCm, setLvCm] = useState(67.5);
     const [targetFb, setTargetFb] = useState(30);
+    const [tuningInput, setTuningInput] = useState<"length" | "frequency">("length");
     const [ql, setQl] = useState(10);
     const [portModel, setPortModel] = useState<"physical" | "speakershop">("speakershop");
 
     const errors = {
         vb: fieldError("Vb", vb),
         sp: fieldError("Сечение порта", spCm2),
-        lv: fieldError("Длина порта", lvCm),
+        lv: tuningInput === "length" ? fieldError("Длина порта", lvCm) : null,
         fb: fieldError("Целевая Fb", targetFb),
         ql: fieldError("Ql", ql),
     };
@@ -40,16 +41,27 @@ export function PortedBoxPage() {
     const calculation = useMemo(() => {
         if (!valid) return { result: null, length: null, warnings: [], error: null };
         try {
-            const geom = { spCm2, lvCm, model: portModel };
-            const result = portedBox(vb, geom);
             const length = lvForTuning(vb, spCm2, targetFb, portModel === "speakershop" ? 2 : 1.46, portModel === "speakershop" ? 35667 : 34300);
+            if (tuningInput === "frequency" && length === null) return { result: null, length: null, warnings: [], error: "Для такой Fb труба не подходит: нужна нулевая или отрицательная длина. Уменьшите частоту или измените объём и сечение порта." };
+            const geom = { spCm2, lvCm: tuningInput === "frequency" && length !== null ? length : lvCm, model: portModel };
+            const result = portedBox(vb, geom);
             if (![result.fbHz, result.leffCm, result.rCm].every(Number.isFinite) || (length !== null && !Number.isFinite(length))) throw new Error("Параметры выходят за численный диапазон расчёта");
             return { result, length, warnings: checkPort(result, geom), error: null };
         } catch (error) {
             return { result: null, length: null, warnings: [], error: error instanceof Error ? error.message : "Ошибка расчёта" };
         }
-    }, [valid, vb, spCm2, lvCm, targetFb, portModel]);
+    }, [valid, vb, spCm2, lvCm, targetFb, portModel, tuningInput]);
     const { result, warnings, length: lvForFb } = calculation;
+    const geometryLength = tuningInput === "frequency" ? lvForFb ?? NaN : lvCm;
+
+    const editLength = (length: number) => {
+        setLvCm(length);
+        setTuningInput("length");
+        if ([vb, spCm2, length].every(value => Number.isFinite(value) && value > 0)) {
+            try { setTargetFb(tuningHz(vb, { spCm2, lvCm: length, model: portModel })); }
+            catch { /* The calculation reports invalid or overflowing geometry. */ }
+        }
+    };
 
     const params = result ? {
         fs: ts.fs,
@@ -62,16 +74,17 @@ export function PortedBoxPage() {
     const f3Hz = params ? portedF3Hz(params) : null;
     const masterSetupSelected = Math.abs(vb - 130) < 0.01
         && Math.abs(spCm2 - Math.PI * 9.5 ** 2) < 0.01
-        && Math.abs(lvCm - 59.09) < 0.01
+        && Math.abs(geometryLength - 59.09) < 0.01
         && Math.abs(targetFb - 30) < 0.01
         && Math.abs(ql - 7) < 0.01;
     const physicalMasterSetupSelected = Math.abs(vb - 130) < 0.01
         && Math.abs(spCm2 - Math.PI * 10 ** 2) < 0.01
-        && Math.abs(lvCm - 50) < 0.01
+        && Math.abs(geometryLength - 50) < 0.01
         && Math.abs(targetFb - 30) < 0.01
         && Math.abs(ql - 7) < 0.01;
     const chooseReference = (referenceVb: number, referenceFb: number, portDiameterCm: number, referenceLength: number, referenceQl = 10, referenceModel: "physical" | "speakershop" = "speakershop") => {
         setPortModel(referenceModel);
+        setTuningInput("length");
         setVb(referenceVb);
         setTargetFb(referenceFb);
         setSpCm2(Number((Math.PI * (portDiameterCm / 2) ** 2).toFixed(2)));
@@ -146,18 +159,19 @@ export function PortedBoxPage() {
                     label="Длина порта Lv"
                     unit="см"
                     hint="Геометрическая длина трубы, без поправки на концы."
-                    value={lvCm}
+                    value={geometryLength}
                     error={errors.lv}
-                    onChange={setLvCm}
+                    onChange={editLength}
                 />
                 <FieldWithHint
                     label="Целевая Fb"
                     unit="Гц"
-                    hint="Подбор длины трубы под эту частоту настройки."
+                    hint="Изменение частоты автоматически подбирает длину порта и обновляет график. Объём и сечение остаются заданными вами."
                     value={targetFb}
                     error={errors.fb}
-                    onChange={setTargetFb}
+                    onChange={value => { setTargetFb(value); setTuningInput("frequency"); }}
                 />
+                <p className="text-xs leading-relaxed text-zinc-400">{tuningInput === "frequency" ? "Подбираем длину под Fb. При изменении объёма или сечения частота сохраняется, длина пересчитывается." : "Считаем Fb по длине порта. Измените целевую Fb, чтобы подобрать новую длину и обновить график."}</p>
                 <FieldWithHint
                     label="Ql"
                     hint="Добротность потерь ящика. Влияет на форму АЧХ и F3, но не на Fb, рассчитанную по объёму и порту."
@@ -214,8 +228,8 @@ export function PortedBoxPage() {
                 <h2 className="text-sm font-semibold text-zinc-300">Подбор длины</h2>
                 <p className="text-xs text-zinc-400">Объём трубы и запас внутреннего объёма</p>
                 <div className="grid gap-1 border-t border-zinc-800 pt-3 text-sm">
-                    <p>Объём трубы Sp × Lv: {(result ? spCm2 * lvCm / 1000 : undefined)?.toFixed(2) ?? "—"} л</p>
-                    <p>Короб изнутри: не меньше {(result ? vb + spCm2 * lvCm / 1000 : undefined)?.toFixed(2) ?? "—"} л без динамика и распорок</p>
+                    <p>Объём трубы Sp × Lv: {(result ? spCm2 * geometryLength / 1000 : undefined)?.toFixed(2) ?? "—"} л</p>
+                    <p>Короб изнутри: не меньше {(result ? vb + spCm2 * geometryLength / 1000 : undefined)?.toFixed(2) ?? "—"} л без динамика и распорок</p>
                 </div>
                 {valid && lvForFb !== null && (
                     <p className="text-sm">
