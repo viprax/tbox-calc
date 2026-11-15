@@ -46,13 +46,13 @@ describe("sealed real-world calculation transparency", () => {
         const html = renderToStaticMarkup(createElement(ClosedBoxPage, { initialDraft: { ...createSealedDraft(), mode: "expert" } }));
         expect(html).toContain("Цель: 20.00 л");
         expect(html).toContain("20.00");
-        expect(html).toContain("Без вычета динамика");
+        expect(html).toContain("Вытеснение не задано");
         expect(html).toContain("40.51");
     });
-    it("identifies unmeasured driver data and unaccounted displacement", () => {
+    it("removes provenance commentary but identifies unaccounted displacement", () => {
         const html = renderToStaticMarkup(createElement(ClosedBoxPage, { initialDraft: { ...createSealedDraft(), mode: "expert" } }));
-        expect(html).toContain('aria-label="Достоверность исходных данных"');
-        expect(html).toContain("На этом экземпляре не измерены");
+        expect(html).not.toContain('aria-label="Достоверность исходных данных"');
+        expect(html).not.toContain("На этом экземпляре не измерены");
         expect(html).toContain("Вытеснение не задано");
     });
 });

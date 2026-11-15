@@ -1,0 +1,5 @@
+/docs/
+/artifacts/
+/.agents/
+/.playwright-cli/
+/scripts/

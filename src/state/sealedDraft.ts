@@ -11,6 +11,7 @@ export const SEALED_PRESETS = { edge: DEFAULT_DRIVER, jl: JL_REFERENCE_DRIVER } 
 
 export interface SealedBoxDraft {
     mode: SealedMode;
+    responseBasis: "target" | "construction";
     view: SealedView;
     presetKey: PresetKey;
     parametersEdited: boolean;
@@ -40,7 +41,7 @@ export interface SealedBoxDraft {
 /** Layout defaults are editable allowances, not manufacturer requirements. */
 export function createSealedDraft(): SealedBoxDraft {
     return selectDriverPreset({
-        mode: "simple", view: "chart", presetKey: "edge", parametersEdited: false,
+        mode: "simple", responseBasis: "target", view: "chart", presetKey: "edge", parametersEdited: false,
         ts: { ...DEFAULT_DRIVER.ts }, vb: 20, ql: 10, cabin: { ...CABIN_GAIN_DEFAULT },
         material: "plywood", customDims: false, dimsMm: { w: 405, h: 405, d: 247 },
         limitsEnabled: false, limitsMm: { w: 900, h: 500, d: 700 },
@@ -80,7 +81,7 @@ const dims = (v: unknown) => record(v) && ["w", "h", "d"].every(k => number(v[k]
 const oneOf = (...options: unknown[]) => (v: unknown) => options.includes(v);
 const tsKeys = ["fs", "qts", "vas", "sd", "xmax", "qms", "qes", "re", "le", "bl", "mms"];
 const validators: Record<keyof SealedBoxDraft, (v: unknown) => boolean> = {
-    mode: oneOf("simple", "expert"), view: oneOf("chart", "2d", "3d", "drawing"),
+    responseBasis: oneOf("target", "construction"), mode: oneOf("simple", "expert"), view: oneOf("chart", "2d", "3d", "drawing"),
     presetKey: oneOf("edge", "jl"), parametersEdited: bool,
     ts: v => record(v) && ["fs", "qts", "vas", "sd", "xmax"].every(k => number(v[k])) && Object.keys(v).every(k => tsKeys.includes(k) && number(v[k])),
     vb: number, ql: oneOf(10, Infinity),
@@ -104,7 +105,7 @@ export function decodeSealedDraft(raw: string): SealedBoxDraft | null {
             return v;
         });
         if (!record(stored) || stored.version !== 1 || !record(stored.draft)) return null;
-        const draft = stored.draft;
+        const draft: Record<string, unknown> = { ...stored.draft, responseBasis: stored.draft.responseBasis ?? (stored.draft.mode === "expert" ? "construction" : "target") };
         if (!Object.entries(validators).every(([key, validate]) => validate(draft[key]))) return null;
         // Whitelist fields; do not retain unrecognised stored properties.
         return Object.fromEntries(Object.keys(validators).map(key => [key, draft[key]])) as unknown as SealedBoxDraft;
