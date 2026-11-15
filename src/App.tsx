@@ -25,7 +25,7 @@ const enclosureOptions = [
 const menuItems = ["account", "drivers", "help", "support"] as const;
 type DragState = { pointerId: number; startX: number; startScrollLeft: number; moved: boolean };
 
-export default function App() {
+export default function App({ sealedOnly = import.meta.env.PROD }: { sealedOnly?: boolean }) {
     const [tab, setTab] = useState<Tab>("closed");
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuMounted, setMenuMounted] = useState(false);
@@ -155,7 +155,7 @@ export default function App() {
                         }
                     }} className={`relative flex min-w-0 flex-1 snap-x snap-proximity gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-white/5 bg-zinc-950/85 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden touch-pan-x select-none ${draggingTypes ? "cursor-grabbing" : "cursor-grab"}`} aria-label="Тип короба">
                         <span aria-hidden="true" className={`pointer-events-none absolute left-0 top-1 bottom-1 z-0 rounded-lg bg-orange-500 shadow-sm shadow-orange-950/50 transition-[transform,width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${typeIndicator ? "opacity-100" : "opacity-0"}`} style={typeIndicator ? { width: typeIndicator.width, transform: `translateX(${typeIndicator.left}px)` } : undefined} />
-                        {enclosureOptions.map(([id, title]) => {
+                        {enclosureOptions.filter(([id]) => !sealedOnly || id === "closed").map(([id, title]) => {
                             const selected = tab === id;
                             const isPlanned = id in planned;
                             return <button ref={(node) => { if (node) typeButtonRefs.current.set(id, node); else typeButtonRefs.current.delete(id); }} key={id} onClick={() => setTab(id)} aria-current={selected ? "page" : undefined} className={`relative z-10 flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-xl bg-transparent px-3 py-2 text-sm font-medium transition-[color,transform] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-orange-400 ${selected ? "text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"}`}>
@@ -170,7 +170,7 @@ export default function App() {
             </header>
             <div ref={contentRef}>
                 <div hidden={tab !== "closed"}><ClosedBoxPage /></div>
-                <div hidden={tab !== "ported"}><PortedBoxPage /></div>
+                {!sealedOnly && <div hidden={tab !== "ported"}><PortedBoxPage /></div>}
                 {tab !== "closed" && tab !== "ported" && <PreviewPage id={tab} title={planned[tab][0]} onBack={() => setTab("closed")} />}
             </div>
             {menuMounted && <div className="fixed inset-0 z-40" role="presentation">

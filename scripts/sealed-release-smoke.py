@@ -4,6 +4,7 @@ import sys
 from orca_browser import Browser
 b = Browser(sys.argv[1] if len(sys.argv)>1 else 'http://127.0.0.1:5173/', 'Sealed release')
 try:
+    assert 'Фазоинвертор' not in b.body(), 'Unfinished ported page must not be in the release'
     assert 'Простой' not in b.body() and 'Экспертный' not in b.body()
     assert 'Источники параметров' not in b.body() and '90%' not in b.body()
     baseline=b.metrics()

@@ -10,7 +10,7 @@ import { DEFAULT_DRIVER } from "../data/drivers";
 
 describe("restored calculator interface", () => {
     it("restores the original navigation, ported section and menu", () => {
-        const html = renderToStaticMarkup(createElement(App));
+        const html = renderToStaticMarkup(createElement(App, { sealedOnly: false }));
         expect(html).toContain("Фазоинвертор");
         expect(html).toContain("Открыть меню");
         expect(html).toContain("ЧВ-резонатор");

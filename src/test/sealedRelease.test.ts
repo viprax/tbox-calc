@@ -2,10 +2,18 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ClosedBoxPage } from "../pages/ClosedBoxPage";
+import App from "../App";
 import { createSealedDraft, decodeSealedDraft, encodeSealedDraft } from "../state/sealedDraft";
 
 const render = (mode: "simple" | "expert") => renderToStaticMarkup(createElement(ClosedBoxPage, { initialDraft: { ...createSealedDraft(), mode } }));
 describe("unified sealed workspace", () => {
+    it("excludes unfinished enclosure pages from the sealed-only release", () => {
+        const html = renderToStaticMarkup(createElement(App, { sealedOnly: true }));
+        expect(html).toContain("Закрытый ящик");
+        expect(html).not.toContain("Фазоинвертор");
+        expect(html).not.toContain("Ящик и порт");
+        expect(html).not.toContain("ЧВ-резонатор");
+    });
     it("offers every result view regardless of the saved legacy mode", () => {
         for (const mode of ["simple", "expert"] as const) {
             const html = render(mode);
